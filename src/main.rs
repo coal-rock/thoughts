@@ -1,29 +1,30 @@
-use anyhow::{Result, anyhow};
-use crossterm::event::{self, Event};
-use ratatui::{DefaultTerminal, Frame, layout::Rect, widgets::Paragraph};
+use anyhow::Result;
+use iocraft::prelude::*;
 
-fn main() -> Result<()> {
-    let terminal = ratatui::init();
-    let result = run(terminal);
-    ratatui::restore();
-    result
-}
+#[tokio::main]
+async fn main() -> Result<()> {
+    element! {
+        View(
+            border_style: BorderStyle::Round,
+            border_color: Color::Blue,
+            width: Size::Length(100),
+            height: Size::Length(20),
+            justify_content: JustifyContent::Center,
+        ) {
+            View() {
+                View(
+                    border_style: BorderStyle::Round,
+                    border_color: Color::Red,
+                    justify_content: JustifyContent::Center,
 
-fn run(mut terminal: DefaultTerminal) -> Result<()> {
-    loop {
-        terminal.draw(render)?;
-
-        if matches!(event::read()?, Event::Key(_)) {
-            break Ok(());
+                ) {
+                        Text(content: "Hello, world", align: TextAlign::Right, wrap: TextWrap::NoWrap)
+                }
+            }
         }
     }
-}
+    .fullscreen()
+    .await?;
 
-fn render(frame: &mut Frame) {
-    frame.render_widget("hello world", frame.area());
-
-    frame.render_widget(
-        Paragraph::new("hello world, but lower this time"),
-        Rect::new(10, 10, 50, 50),
-    );
+    Ok(())
 }
