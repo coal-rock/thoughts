@@ -34,11 +34,33 @@ fn App(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         system.exit();
     }
 
+    let should_render = width >= 58 && height >= 18;
+    let show_note_content = width >= 80;
+
+    element! {
+        View(){
+            #(match should_render {
+                true => element!{MainPage(term_width: width, term_height: height, show_note_content)}.into_any(),
+                false => element!{ResizeTermPage(term_width: width, term_height: height)}.into_any(),
+            })
+        }
+    }
+}
+
+#[derive(Default, Props)]
+struct MainPageProps {
+    show_note_content: bool,
+    term_width: u16,
+    term_height: u16,
+}
+
+#[component]
+fn MainPage(props: &MainPageProps) -> impl Into<AnyElement<'static>> {
     element! {
         View(
             display: Display::Flex,
-            height: height,
-            width: width,
+            height: props.term_height,
+            width: props.term_width,
             flex_direction: FlexDirection::Column,
             padding_left: 1,
             padding_right: 1,
@@ -51,7 +73,13 @@ fn App(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 height: 100pct,
                 ) {
                 NoteList()
-                NoteContent()
+
+                // Hide the content of a note if the terminal is smaller than
+                // or equal to 80 characters wide
+                #(match props.show_note_content {
+                        true => element!{NoteContent}.into_any(),
+                        false => element!{View}.into_any(),
+                })
             }
 
             SearchBar()
@@ -59,8 +87,66 @@ fn App(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     }
 }
 
+#[derive(Default, Props)]
+struct ResizeTermPageProps {
+    term_width: u16,
+    term_height: u16,
+}
+
 #[component]
-fn StatusBar(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
+fn ResizeTermPage(props: &ResizeTermPageProps) -> impl Into<AnyElement<'static>> {
+    let width_color = match props.term_width >= 58 {
+        true => Color::Green,
+        false => Color::Red,
+    };
+
+    let height_color = match props.term_height >= 18 {
+        true => Color::Green,
+        false => Color::Red,
+    };
+
+    element! {
+        View(
+            display: Display::Flex,
+            height: props.term_height,
+            width: props.term_width,
+            padding_left: 1,
+            padding_right: 1,
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            flex_direction: FlexDirection::Column,
+        ) {
+            View(padding_top: 1, padding_bottom: 1, padding_left: 4, padding_right: 4, border_style: BorderStyle::Single) {
+                Text(content: "Terminal is too small!", weight: Weight::Bold)
+            }
+
+            View(padding_top: 1, padding_bottom: 1, padding_left: 4, padding_right: 4, border_style: BorderStyle::Single) {
+                View(flex_direction: FlexDirection::Column) {
+                    View() {
+                        Text(content: "Current Dimensions:")
+                        View(padding_left: 4) {
+                            Text(content: format!("{}", props.term_width), color: width_color)
+                            Text(content: "x", color: Color::DarkGrey)
+                            Text(content: format!("{}", props.term_height),color: height_color)
+                        }
+                    }
+                    View() {
+                        Text(content: "Desired Dimensions:")
+                        View(padding_left: 4) {
+                            Text(content: "58")
+                            Text(content: "x", color: Color::DarkGrey)
+                            Text(content: "18")
+                        }
+                    }
+
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn StatusBar() -> impl Into<AnyElement<'static>> {
     element! {
         View(
             height: 1,
@@ -70,16 +156,16 @@ fn StatusBar(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             justify_content: JustifyContent::SpaceBetween,
         ) {
             // This is a cheap hack. We are essentially "padding" the width of the 1st and
-            // 3rd divs to be 25 regardless of content, that way `justify-content: space-between`
+            // 3rd divs to be 19 regardless of content, that way `justify-content: space-between`
             // will place the 2nd div exactly in the center of the two
-            View(width: 25) {
+            View(width: 19) {
                 Text(content: "Thoughts", weight: Weight::Bold, align: TextAlign::Left)
             }
             View() {
                 Text(content: "Esc ", weight: Weight::Bold, align: TextAlign::Center, color: Color::DarkGrey, wrap: TextWrap::NoWrap)
                 Text(content: "to exit", align: TextAlign::Center, color: Color::DarkGrey)
             }
-            View(width: 25, justify_content: JustifyContent::End) {
+            View(width: 19, justify_content: JustifyContent::End) {
                 Text(content: "entry count: 144", align: TextAlign::Right, color: Color::DarkGrey)
             }
         }
@@ -87,7 +173,7 @@ fn StatusBar(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 }
 
 #[component]
-fn NoteList(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
+fn NoteList() -> impl Into<AnyElement<'static>> {
     element! {
         View(
             border_style: BorderStyle::Round,
@@ -98,7 +184,7 @@ fn NoteList(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 }
 
 #[component]
-fn NoteContent(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
+fn NoteContent() -> impl Into<AnyElement<'static>> {
     element! {
         View(
             border_style: BorderStyle::Round,
