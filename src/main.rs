@@ -92,13 +92,34 @@ fn NoteContent(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
 #[component]
 fn SearchBar(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
+    let mut query = hooks.use_state(|| String::new());
+
     element! {
         View(
             height: 3,
             border_style: BorderStyle::Round,
             border_color: Color::White,
         ) {
-            Text(content: "Search: ")
+            Text(content: "Search: ", wrap: TextWrap::NoWrap)
+            // Unbelievable hack, but it must be done
+            // I don't see any way to set the cursor character,
+            // so the solution that I've come up with is to create a "back buffer"
+            // that handles polling input, followed by a "front buffer" that simply
+            // displays the content of the "back buffer" with a cursor char at the end.
+            //
+            // I can't simply use a Text() element for the front buffer,
+            // as it lacks the scroll-on-overflow effect, and I can't add
+            // the cursor char to the end of back buffer, as that would break
+            // the use_state hook.
+
+            TextInput(value: format!("{}▌", query.to_string()))
+            View(width: 0) {
+                TextInput(
+                        has_focus: true,
+                        value: query.to_string(),
+                        on_change: move |new_value| query.set(new_value),
+                )
+            }
         }
     }
 }
