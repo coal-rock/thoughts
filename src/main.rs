@@ -51,9 +51,19 @@ fn StatusBar(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             display: Display::Flex,
             justify_content: JustifyContent::SpaceBetween,
         ) {
-            Text(content: "Thoughts")
-            Text(content: "Esc to exit")
-            Text(content: "entry count: 144")
+            // This is a cheap hack. We are essentially "padding" the width of the 1st and
+            // 3rd divs to be 25 regardless of content, that way `justify-content: space-between`
+            // will place the 2nd div exactly in the center of the two
+            View(width: 25) {
+                Text(content: "Thoughts", weight: Weight::Bold, align: TextAlign::Left)
+            }
+            View() {
+                Text(content: "Esc ", weight: Weight::Bold, align: TextAlign::Center, color: Color::DarkGrey, wrap: TextWrap::NoWrap)
+                Text(content: "to exit", align: TextAlign::Center, color: Color::DarkGrey)
+            }
+            View(width: 25, justify_content: JustifyContent::End) {
+                Text(content: "entry count: 144", align: TextAlign::Right, color: Color::DarkGrey)
+            }
         }
     }
 }
