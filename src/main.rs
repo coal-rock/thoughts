@@ -4,7 +4,7 @@ use iocraft::prelude::*;
 #[tokio::main]
 async fn main() -> Result<()> {
     element! {
-        MainPage()
+        App()
     }
     .fullscreen()
     .await?;
@@ -13,8 +13,26 @@ async fn main() -> Result<()> {
 }
 
 #[component]
-fn MainPage(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
+fn App(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let (width, height) = hooks.use_terminal_size();
+    let mut system = hooks.use_context_mut::<SystemContext>();
+    let mut should_exit = hooks.use_state(|| false);
+
+    hooks.use_terminal_events({
+        move |event| match event {
+            TerminalEvent::Key(KeyEvent { code, kind, .. }) if kind != KeyEventKind::Release => {
+                match code {
+                    KeyCode::Esc => should_exit.set(true),
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    });
+
+    if should_exit.get() == true {
+        system.exit();
+    }
 
     element! {
         View(
