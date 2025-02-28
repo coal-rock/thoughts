@@ -1,5 +1,6 @@
 use anyhow::Result;
 use iocraft::prelude::*;
+use std::cmp::{max, min};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -197,6 +198,52 @@ fn NoteContent() -> impl Into<AnyElement<'static>> {
 #[component]
 fn SearchBar(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let mut query = hooks.use_state(|| String::new());
+    let mut cursor_position = hooks.use_state(|| 0);
+    let query_cloned = query.to_string();
+
+    // I unironically had to whiteboard the following logic, I feel so dumb
+
+    // there is some text after the cursor if the position of the cursor is less
+    // than the total length of the query
+    let after_cursor = if cursor_position < query_cloned.len() {
+        &query_cloned[cursor_position.get() + 1..query_cloned.len()]
+    } else {
+        ""
+    };
+
+    // there is some text before the cursor if the position of the cursor is greater than 0
+    let before_cursor = if cursor_position.get() > 0 {
+        &query_cloned[..cursor_position.get()]
+    } else {
+        ""
+    };
+
+    // there is some text under the cursor at the position of the cursor
+    let during_cursor = match &query_cloned.get(cursor_position.get()..=cursor_position.get()) {
+        Some(char) => *char,
+        None => "_",
+    };
+
+    hooks.use_terminal_events({
+        move |event| match event {
+            TerminalEvent::Key(KeyEvent { code, kind, .. }) if kind != KeyEventKind::Release => {
+                match code {
+                    KeyCode::Left => {
+                        if cursor_position.get() > 0 {
+                            cursor_position.set(cursor_position - 1);
+                        }
+                    }
+                    KeyCode::Right => {
+                        if cursor_position.get() < query.to_string().len() {
+                            cursor_position.set(cursor_position + 1);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    });
 
     element! {
         View(
@@ -205,6 +252,8 @@ fn SearchBar(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             border_color: Color::White,
         ) {
             Text(content: "Search: ", wrap: TextWrap::NoWrap)
+            // TODO: rewrite this, there is a much more egregious hack in it's place.
+            //
             // Unbelievable hack, but it must be done
             // I don't see any way to set the cursor character,
             // so the solution that I've come up with is to create a "back buffer"
@@ -215,13 +264,49 @@ fn SearchBar(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             // as it lacks the scroll-on-overflow effect, and I can't add
             // the cursor char to the end of back buffer, as that would break
             // the use_state hook.
+            View() {
+                Text(content: *before_cursor)
+                Text(content: *during_cursor, decoration: TextDecoration::Underline)
+                Text(content: *after_cursor)
+            }
 
-            TextInput(value: format!("{}▌", query.to_string()))
             View(width: 0) {
                 TextInput(
                         has_focus: true,
                         value: query.to_string(),
-                        on_change: move |new_value| query.set(new_value),
+                        on_change: move |new_value: String| {
+                            let mut new_value = new_value.clone();
+                            let mut old_value = query.to_string();
+                            let length_difference = new_value.len() as i32 - old_value.len() as i32;
+
+                            if length_difference > 0 {
+                                let mut char_difference: Vec<char> = vec![];
+
+                                for _ in old_value.len()..old_value.len() + length_difference as usize {
+                                    char_difference.push(new_value.pop().unwrap());
+                                }
+
+                                for (index, char) in char_difference.into_iter().enumerate() {
+                                    new_value.insert(cursor_position.get() + index, char);
+                                }
+                            }
+
+                            if length_difference < 0 {
+                                if cursor_position > 0 {
+                                    for _ in 0..length_difference.abs() as usize {
+                                        old_value.remove(cursor_position.get() - 1);
+                                    }
+                                }
+
+                                new_value = old_value;
+                            }
+
+                            let new_cursor_pos = max(cursor_position.get() as i32 + length_difference, 0) as usize;
+                            cursor_position.set(new_cursor_pos);
+
+                            query.set(new_value);
+                        },
+
                 )
             }
         }
