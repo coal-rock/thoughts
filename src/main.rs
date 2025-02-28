@@ -286,7 +286,7 @@ fn SearchBar(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                     char_difference.push(new_value.pop().unwrap());
                                 }
 
-                                for (index, char) in char_difference.into_iter().enumerate() {
+                                for (index, char) in char_difference.into_iter().rev().enumerate() {
                                     new_value.insert(cursor_position.get() + index, char);
                                 }
                             }
