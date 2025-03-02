@@ -48,7 +48,7 @@ fn App(mut hooks: Hooks, props: &AppProps) -> impl Into<AnyElement<'static>> {
     }
 
     let should_render = width >= props.config.min_width && height >= props.config.min_height;
-    let show_note_content = width >= 80;
+    let show_note_content = width >= props.config.react_width;
 
     element! {
         View(){
@@ -88,7 +88,7 @@ fn MainPage(props: &MainPageProps) -> impl Into<AnyElement<'static>> {
                 NoteList()
 
                 // Hide the content of a note if the terminal is smaller than
-                // or equal to 80 characters wide
+                // or equal to the react width set through the config
                 #(match props.show_note_content {
                         true => element!{NoteContent}.into_any(),
                         false => element!{View}.into_any(),

@@ -14,6 +14,7 @@ struct ConfigProto {
     pub reactive: Option<bool>,
     pub min_width: Option<u16>,
     pub min_height: Option<u16>,
+    pub react_width: Option<u16>,
 }
 
 impl Default for ConfigProto {
@@ -34,6 +35,7 @@ impl Default for ConfigProto {
             reactive: Some(true),
             min_width: Some(58),
             min_height: Some(18),
+            react_width: Some(80),
         }
     }
 }
@@ -47,6 +49,7 @@ pub struct Config {
     pub reactive: bool,
     pub min_width: u16,
     pub min_height: u16,
+    pub react_width: u16,
 }
 
 impl Config {
@@ -91,6 +94,7 @@ impl Config {
             reactive: config_proto.reactive.unwrap(),
             min_width: config_proto.min_width.unwrap(),
             min_height: config_proto.min_height.unwrap(),
+            react_width: config_proto.react_width.unwrap(),
         })
     }
 }
