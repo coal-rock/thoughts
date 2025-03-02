@@ -205,6 +205,8 @@ fn NoteContent() -> impl Into<AnyElement<'static>> {
 
 #[component]
 fn SearchBar(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
+    // TODO: Allow for text to scroll if it extends pass the bounds of what
+    // can be displayed to the user
     let mut query = hooks.use_state(|| String::new());
     let mut cursor_position = hooks.use_state(|| 0);
     let query_cloned = query.to_string();
@@ -229,7 +231,7 @@ fn SearchBar(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     // The length of the difference is 1, meaning we pop the most recently appended character,
     // and insert it at the position of the cursor.
 
-    // there is some text after the cursor if the position of the cursor is less
+    // // there is some text after the cursor if the position of the cursor is less
     // than the total length of the query
     let after_cursor = if cursor_position < query_cloned.len() {
         &query_cloned[cursor_position.get() + 1..query_cloned.len()]
@@ -247,7 +249,7 @@ fn SearchBar(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     // there is some text under the cursor at the position of the cursor
     let during_cursor = match &query_cloned.get(cursor_position.get()..=cursor_position.get()) {
         Some(char) => *char,
-        None => "_",
+        None => " ",
     };
 
     hooks.use_terminal_events({
@@ -280,7 +282,9 @@ fn SearchBar(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             Text(content: "Search: ", wrap: TextWrap::NoWrap)
             View() {
                 Text(content: *before_cursor)
-                Text(content: *during_cursor, decoration: TextDecoration::Underline)
+                View(background_color: Color::White) {
+                    Text(content: *during_cursor, color: Color::Black)
+                }
                 Text(content: *after_cursor)
             }
 
