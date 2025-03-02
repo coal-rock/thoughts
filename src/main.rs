@@ -1,11 +1,16 @@
 pub mod config;
 
 use anyhow::Result;
+use config::Config;
 use iocraft::prelude::*;
 use std::cmp::max;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let config_path = Config::get_path();
+    let config = Config::read(config_path)?;
+    println!("{:#?}", config);
+
     element! {
         App()
     }

@@ -6,7 +6,7 @@ use std::env;
 use std::path::PathBuf;
 
 #[derive(Deserialize, Serialize)]
-pub struct ConfigProto {
+struct ConfigProto {
     pub vault_path: Option<PathBuf>,
     pub thoughts_path: Option<PathBuf>,
     pub temp_file_path: Option<PathBuf>,
@@ -38,7 +38,8 @@ impl Default for ConfigProto {
     }
 }
 
-struct Config {
+#[derive(Debug)]
+pub struct Config {
     pub vault_path: PathBuf,
     pub thoughts_path: PathBuf,
     pub temp_file_path: PathBuf,
