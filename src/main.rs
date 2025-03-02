@@ -47,7 +47,7 @@ fn App(mut hooks: Hooks, props: &AppProps) -> impl Into<AnyElement<'static>> {
         system.exit();
     }
 
-    let should_render = width >= 58 && height >= 18;
+    let should_render = width >= props.config.min_width && height >= props.config.min_height;
     let show_note_content = width >= 80;
 
     element! {

@@ -12,8 +12,8 @@ struct ConfigProto {
     pub temp_file_path: Option<PathBuf>,
     pub editor_command: Option<String>,
     pub reactive: Option<bool>,
-    pub min_width: Option<u32>,
-    pub min_height: Option<u32>,
+    pub min_width: Option<u16>,
+    pub min_height: Option<u16>,
 }
 
 impl Default for ConfigProto {
@@ -45,8 +45,8 @@ pub struct Config {
     pub temp_file_path: PathBuf,
     pub editor_command: String,
     pub reactive: bool,
-    pub min_width: u32,
-    pub min_height: u32,
+    pub min_width: u16,
+    pub min_height: u16,
 }
 
 impl Config {
