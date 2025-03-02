@@ -157,8 +157,16 @@ fn StatusBar() -> impl Into<AnyElement<'static>> {
             justify_content: JustifyContent::SpaceBetween,
         ) {
             // This is a cheap hack. We are essentially "padding" the width of the 1st and
-            // 3rd divs to be 19 regardless of content, that way `justify-content: space-between`
-            // will place the 2nd div exactly in the center of the two
+            // 3rd divs to be 19 units regardless of content, that way `justify-content: space-between`
+            // will place the 2nd div exactly in the center of the two.
+            //
+            // This is less of an issue due to the 1st and 3rd divs being primarily static,
+            // but it may create issues when resizing.
+            //
+            // TODO: In the future, set the width equal to the amount of characters in the
+            // content field of the Text element in the 3rd, div. Eg:
+            // "entry count: 144"   - width = 16
+            // "entry count: 1092"  - width = 17
             View(width: 19) {
                 Text(content: "Thoughts", weight: Weight::Bold, align: TextAlign::Left)
             }
@@ -200,8 +208,26 @@ fn SearchBar(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let mut query = hooks.use_state(|| String::new());
     let mut cursor_position = hooks.use_state(|| 0);
     let query_cloned = query.to_string();
-
-    // I unironically had to whiteboard the following logic, I feel so dumb
+    // I unironically had to whiteboard the following logic, I feel so dumb.
+    //
+    // Brazinski's algorithm:
+    // Assuming a stateful, append-only stream of alpha-numerical userinput, and a stateful
+    // "cursor", how could one infer the correct position of the appended text.
+    //
+    // The solution is to track both the previous buffer, and the current buffer.
+    //
+    // Eg:
+    //
+    // Old State: ["h", "e", "l", "o"]
+    // New State: ["h", "e", "l", "o", "l"]
+    // Cursor Position: 3
+    //
+    // Length of Old State = 4
+    // Length of New State = 5
+    // Length difference = 5 - 4 = 1
+    //
+    // The length of the difference is 1, meaning we pop the most recently appended character,
+    // and insert it at the position of the cursor.
 
     // there is some text after the cursor if the position of the cursor is less
     // than the total length of the query
@@ -252,18 +278,6 @@ fn SearchBar(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             border_color: Color::White,
         ) {
             Text(content: "Search: ", wrap: TextWrap::NoWrap)
-            // TODO: rewrite this, there is a much more egregious hack in it's place.
-            //
-            // Unbelievable hack, but it must be done
-            // I don't see any way to set the cursor character,
-            // so the solution that I've come up with is to create a "back buffer"
-            // that handles polling input, followed by a "front buffer" that simply
-            // displays the content of the "back buffer" with a cursor char at the end.
-            //
-            // I can't simply use a Text() element for the front buffer,
-            // as it lacks the scroll-on-overflow effect, and I can't add
-            // the cursor char to the end of back buffer, as that would break
-            // the use_state hook.
             View() {
                 Text(content: *before_cursor)
                 Text(content: *during_cursor, decoration: TextDecoration::Underline)
@@ -277,21 +291,26 @@ fn SearchBar(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                         on_change: move |new_value: String| {
                             let mut new_value = new_value.clone();
                             let mut old_value = query.to_string();
+
+                            // We have to cast these to i32s, as we rely on significant negation
                             let length_difference = new_value.len() as i32 - old_value.len() as i32;
 
+                            // if length_difference is positive, we've adding characters
                             if length_difference > 0 {
-                                let mut char_difference: Vec<char> = vec![];
+                                // This cast is safe, as the difference in length can
+                                // never exceed the length of the array
+                                let start = new_value.len() - length_difference as usize;
 
-                                for _ in old_value.len()..old_value.len() + length_difference as usize {
-                                    char_difference.push(new_value.pop().unwrap());
-                                }
-
-                                for (index, char) in char_difference.into_iter().rev().enumerate() {
+                                for (index, char) in new_value.clone()[start..].chars().enumerate() {
+                                    new_value.pop();
                                     new_value.insert(cursor_position.get() + index, char);
                                 }
                             }
 
+                            // if length_difference is negative, we've removed characters
                             if length_difference < 0 {
+                                // if we're pressing backspace at the start of the string, we
+                                // shouldn't do anything
                                 if cursor_position > 0 {
                                     for _ in 0..length_difference.abs() as usize {
                                         old_value.remove(cursor_position.get() - 1);
@@ -301,6 +320,7 @@ fn SearchBar(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                 new_value = old_value;
                             }
 
+                            // offset the cursor by the amount of chars that were removed or added
                             let new_cursor_pos = max(cursor_position.get() as i32 + length_difference, 0) as usize;
                             cursor_position.set(new_cursor_pos);
 
