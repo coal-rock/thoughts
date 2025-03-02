@@ -1,6 +1,8 @@
+pub mod config;
+
 use anyhow::Result;
 use iocraft::prelude::*;
-use std::cmp::{max, min};
+use std::cmp::max;
 
 #[tokio::main]
 async fn main() -> Result<()> {
