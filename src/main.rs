@@ -12,7 +12,7 @@ async fn main() -> Result<()> {
     println!("{:#?}", config);
 
     element! {
-        App()
+        App(config: config)
     }
     .fullscreen()
     .await?;
@@ -20,8 +20,13 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+#[derive(Props, Default)]
+struct AppProps {
+    config: Config,
+}
+
 #[component]
-fn App(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
+fn App(mut hooks: Hooks, props: &AppProps) -> impl Into<AnyElement<'static>> {
     let (width, height) = hooks.use_terminal_size();
     let mut system = hooks.use_context_mut::<SystemContext>();
     let mut should_exit = hooks.use_state(|| false);

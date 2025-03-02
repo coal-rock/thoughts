@@ -28,7 +28,7 @@ impl Default for ConfigProto {
 
         ConfigProto {
             vault_path: None,
-            thoughts_path: None,
+            thoughts_path: Some(PathBuf::from("Thoughts")),
             temp_file_path,
             editor_command: None,
             reactive: Some(true),
@@ -38,7 +38,7 @@ impl Default for ConfigProto {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Config {
     pub vault_path: PathBuf,
     pub thoughts_path: PathBuf,
@@ -72,6 +72,7 @@ impl Config {
     pub fn read(config_path: PathBuf) -> Result<Config> {
         let config_proto: ConfigProto = Figment::from(Serialized::defaults(ConfigProto::default()))
             .merge(Toml::file(config_path))
+            .merge(Toml::file("thoughts.toml"))
             .merge(Env::prefixed("THOUGHTS_"))
             .extract()?;
 

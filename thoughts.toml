@@ -1,0 +1,2 @@
+vault_path = "~/Important/Vault"
+editor_command = "nvim"
