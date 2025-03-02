@@ -54,7 +54,7 @@ fn App(mut hooks: Hooks, props: &AppProps) -> impl Into<AnyElement<'static>> {
         View(){
             #(match should_render {
                 true => element!{MainPage(term_width: width, term_height: height, show_note_content)}.into_any(),
-                false => element!{ResizeTermPage(term_width: width, term_height: height)}.into_any(),
+                false => element!{ResizeTermPage(term_width: width, term_height: height, min_width: props.config.min_width, min_height: props.config.min_height)}.into_any(),
             })
         }
     }
@@ -104,16 +104,18 @@ fn MainPage(props: &MainPageProps) -> impl Into<AnyElement<'static>> {
 struct ResizeTermPageProps {
     term_width: u16,
     term_height: u16,
+    min_width: u16,
+    min_height: u16,
 }
 
 #[component]
 fn ResizeTermPage(props: &ResizeTermPageProps) -> impl Into<AnyElement<'static>> {
-    let width_color = match props.term_width >= 58 {
+    let width_color = match props.term_width >= props.min_width {
         true => Color::Green,
         false => Color::Red,
     };
 
-    let height_color = match props.term_height >= 18 {
+    let height_color = match props.term_height >= props.min_height {
         true => Color::Green,
         false => Color::Red,
     };
@@ -146,9 +148,9 @@ fn ResizeTermPage(props: &ResizeTermPageProps) -> impl Into<AnyElement<'static>>
                     View() {
                         Text(content: "Desired Dimensions:")
                         View(padding_left: 4) {
-                            Text(content: "58")
+                            Text(content: props.min_width.to_string())
                             Text(content: "x", color: Color::DarkGrey)
-                            Text(content: "18")
+                            Text(content: props.min_height.to_string())
                         }
                     }
 
