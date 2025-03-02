@@ -1,7 +1,9 @@
 pub mod config;
+pub mod database;
 
 use anyhow::Result;
 use config::Config;
+use database::Database;
 use iocraft::prelude::*;
 use std::cmp::max;
 
@@ -9,6 +11,10 @@ use std::cmp::max;
 async fn main() -> Result<()> {
     let config_path = Config::get_path();
     let config = Config::read(config_path)?;
+
+    let mut database = Database::new(config.vault_path.clone(), config.thoughts_path.clone());
+    database.poll();
+
     println!("{:#?}", config);
 
     element! {
