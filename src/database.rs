@@ -4,7 +4,8 @@
 use anyhow::{Result, anyhow};
 use glob::glob;
 use serde::{Deserialize, Serialize};
-use std::fs::{self, read_to_string};
+use std::fs::{self, File, read_to_string};
+use std::io::Write;
 use std::path::PathBuf;
 use std::time::UNIX_EPOCH;
 
@@ -19,10 +20,23 @@ pub struct Entry {
     modified_at: u64,
 }
 
+impl Into<Frontmatter> for &Entry {
+    fn into(self) -> Frontmatter {
+        Frontmatter {
+            favorite: self.favorite,
+            thoughts: true,
+            tags: self.tags.clone(),
+            warning: String::from("DO NOT EDIT PROPERTIES"),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 struct Frontmatter {
-    favorite: bool,
+    #[serde(rename = "WARNING")]
+    warning: String,
     thoughts: bool,
+    favorite: bool,
     tags: Vec<String>,
 }
 
@@ -48,11 +62,12 @@ impl Database {
                 continue;
             };
 
-            let Ok(parsed_entry) = Database::parse_entry(file_path) else {
+            let Ok(parsed_entry) = Database::parse_entry(file_path.clone()) else {
                 continue;
             };
 
             println!("{:#?}", parsed_entry);
+            self.write_entry(&parsed_entry);
             self.entries.push(parsed_entry);
         }
 
@@ -126,6 +141,26 @@ impl Database {
             created_at,
             modified_at,
         })
+    }
+
+    /// Writes entry to file. Will overwrite if file already exists
+    pub fn write_entry(&self, entry: &Entry) -> Result<()> {
+        let mut output = String::new();
+
+        output.push_str("---\n");
+
+        let frontmatter: Frontmatter = entry.into();
+        let frontmatter_str = serde_yaml::to_string(&frontmatter)?;
+
+        output.push_str(frontmatter_str.as_str());
+        output.push_str("---\n");
+
+        output.push_str(&entry.content);
+
+        let mut file = File::create(&entry.path)?;
+        file.write_all(output.as_bytes())?;
+
+        Ok(())
     }
 
     /// Creates a new `Database`.
