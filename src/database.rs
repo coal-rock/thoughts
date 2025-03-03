@@ -1,66 +1,185 @@
-use crate::search::{tokenize_search, TokenStream};
-use crate::tui::Entry;
-use std::path::PathBuf;
+// TODO: add a custom tagging system so that the user can create their own tags
+// An example of a tag would be "favorite"
 
-pub struct EntryQuery {
-    pub id: i32,
-    pub title: String,
-    pub timestamp: String,
-    pub content: String,
-    pub favorite: bool,
+use anyhow::{Result, anyhow};
+use glob::glob;
+use serde::{Deserialize, Serialize};
+use std::fs::{self, File, read_to_string};
+use std::io::Write;
+use std::path::PathBuf;
+use std::time::UNIX_EPOCH;
+
+#[derive(Debug, Default)]
+pub struct Entry {
+    title: String,
+    favorite: bool,
+    content: String,
+    tags: Vec<String>,
+    path: PathBuf,
+    created_at: u64,
+    modified_at: u64,
 }
 
-pub trait Database {
-    fn update_entry(&mut self, entry: EntryQuery);
-    fn delete_entry(&mut self, id: i32);
-    fn insert_entry(&mut self, entry: EntryQuery);
-    fn get_all_entries(&self) -> Vec<Entry>;
-    fn backup(&self, backup_dir: &PathBuf);
-
-    fn get_entry_count(&self) -> i32 {
-        self.get_all_entries().len().try_into().unwrap()
+impl Into<Frontmatter> for &Entry {
+    fn into(self) -> Frontmatter {
+        Frontmatter {
+            favorite: self.favorite,
+            thoughts: true,
+            tags: self.tags.clone(),
+            warning: String::from("DO NOT EDIT PROPERTIES"),
+        }
     }
+}
 
-    fn search(&mut self, query: String) -> Vec<Entry> {
-        let mut entries = crate::search::search(self.get_all_entries(), query.clone());
+#[derive(Serialize, Deserialize, Debug)]
+struct Frontmatter {
+    #[serde(rename = "WARNING")]
+    warning: String,
+    thoughts: bool,
+    favorite: bool,
+    tags: Vec<String>,
+}
 
-        // this is actually a really pretty hack :3
-        // of course, we could tokenize debug seperately,
-        // but this is more than fine for a debug feature
-        if query.starts_with("debug ") {
-            let query = query.replacen("debug ", "", 1);
-            entries.push(self.debug_search_tokens(query.clone()));
-            entries.push(self.debug_search_parsed(tokenize_search(query)));
+pub struct Database {
+    /// Path to directory containing all Thoughts, followed by trailing `/*.md`
+    /// Eg: `/home/coal/Important/Vault/Thoughts/*.md`
+    path_str: String,
+    entries: Vec<Entry>,
+}
+
+impl Database {
+    /// Scans the filesystem and stores the state in-memory.
+    /// Expects users to call periodically as to minimize FS-related overhead.
+    /// TODO: think about implementing checksums/hashes to prevent
+    /// excessive re-reads
+    ///
+    /// TODO: add proper logging for errors with parsing, instead of ignoring them
+    pub fn poll(&mut self) -> Result<()> {
+        self.entries.clear();
+
+        for file_path in glob(&self.path_str)? {
+            let Ok(file_path) = file_path else {
+                continue;
+            };
+
+            let Ok(parsed_entry) = Database::parse_entry(file_path.clone()) else {
+                continue;
+            };
+
+            println!("{:#?}", parsed_entry);
+            self.write_entry(&parsed_entry);
+            self.entries.push(parsed_entry);
         }
 
-        entries
+        Ok(())
     }
 
-    // Displays the tokenized input of the search query
-    fn debug_search_tokens(&self, query: String) -> Entry {
-        let tokens = tokenize_search(query);
+    // The day that I use regex will be cherished by many
+    fn parse_entry(file_path: PathBuf) -> Result<Entry> {
+        let title = file_path
+            .file_stem()
+            .ok_or(anyhow!("unable to parse entry name"))?
+            .to_str()
+            .ok_or(anyhow!("unable to convert path to &str"))?
+            .to_string();
 
-        let entry = EntryQuery {
-            id: -1,
-            title: "debug".to_string(),
-            timestamp: 0.to_string(),
-            content: format!("{:#?}", tokens),
-            favorite: true,
+        let created_at = fs::metadata(&file_path)?
+            .created()?
+            .duration_since(UNIX_EPOCH)?
+            .as_secs();
+
+        let modified_at = fs::metadata(&file_path)?
+            .modified()?
+            .duration_since(UNIX_EPOCH)?
+            .as_secs();
+
+        let entry_content = read_to_string(&file_path)?;
+        let entry_content_lines = entry_content.split('\n').collect::<Vec<&str>>();
+
+        if entry_content_lines.len() < 1 {
+            return Err(anyhow!("entry appears to be empty"));
+        }
+
+        if entry_content_lines[0] != "---" {
+            return Err(anyhow!(
+                "entry doesn't appear to contain proper frontmatter"
+            ));
+        }
+
+        let mut frontmatter_end: Option<usize> = None;
+
+        for (index, value) in entry_content_lines[1..].iter().enumerate() {
+            if *value == "---" {
+                frontmatter_end = Some(index)
+            }
+        }
+
+        let Some(frontmatter_end) = frontmatter_end else {
+            return Err(anyhow!("frontmatter doesn't appear to properly terminate"));
         };
 
-        entry.into()
+        let frontmatter_str = entry_content_lines[1..=frontmatter_end]
+            .iter()
+            .cloned()
+            .collect::<Vec<&str>>()
+            .join("\n");
+
+        let frontmatter: Frontmatter = serde_yaml::from_str(&frontmatter_str)?;
+
+        let content = entry_content_lines[frontmatter_end + 2..]
+            .iter()
+            .cloned()
+            .collect::<Vec<&str>>()
+            .join("\n");
+
+        Ok(Entry {
+            title,
+            favorite: frontmatter.favorite,
+            content,
+            tags: frontmatter.tags,
+            path: file_path,
+            created_at,
+            modified_at,
+        })
     }
 
-    // Displays the parsed tokens
-    fn debug_search_parsed(&self, tokens: TokenStream) -> Entry {
-        let entry = EntryQuery {
-            id: -2,
-            title: "debug".to_string(),
-            timestamp: 0.to_string(),
-            content: format!("{:#?}", tokens.tokens),
-            favorite: true,
-        };
+    /// Writes entry to file. Will overwrite if file already exists
+    pub fn write_entry(&self, entry: &Entry) -> Result<()> {
+        let mut output = String::new();
 
-        entry.into()
+        output.push_str("---\n");
+
+        let frontmatter: Frontmatter = entry.into();
+        let frontmatter_str = serde_yaml::to_string(&frontmatter)?;
+
+        output.push_str(frontmatter_str.as_str());
+        output.push_str("---\n");
+
+        output.push_str(&entry.content);
+
+        let mut file = File::create(&entry.path)?;
+        file.write_all(output.as_bytes())?;
+
+        Ok(())
+    }
+
+    /// Creates a new `Database`.
+    ///
+    /// Will scaffold required directories if not already present
+    pub fn new(vault_path: PathBuf, thoughts_path: PathBuf) -> Database {
+        let mut full_thoughts_path = vault_path;
+        full_thoughts_path.push(thoughts_path);
+
+        if !full_thoughts_path.exists() {
+            fs::create_dir_all(&full_thoughts_path).unwrap();
+        }
+
+        full_thoughts_path.push("*.md");
+        let path_str = full_thoughts_path.to_str().unwrap().to_string();
+
+        Database {
+            path_str,
+            entries: vec![],
+        }
     }
 }

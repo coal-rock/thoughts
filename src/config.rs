@@ -1,88 +1,123 @@
-use figment::providers::{Format, Serialized, Toml};
+use anyhow::{Result, anyhow};
 use figment::Figment;
-
+use figment::providers::{Env, Format, Serialized, Toml};
 use serde::{Deserialize, Serialize};
-use shellexpand::tilde;
-use toml;
-
-use std::fs::{self, File};
-use std::io::Write;
+use shellexpand::env;
+use std::env;
 use std::path::PathBuf;
 
-// I would like to deprecate Sql DB
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum DbType {
-    Sql,
-    Fs,
+#[derive(Deserialize, Serialize)]
+struct ConfigProto {
+    pub vault_path: Option<PathBuf>,
+    pub thoughts_path: Option<PathBuf>,
+    pub temp_file_path: Option<PathBuf>,
+    pub editor_command: Option<String>,
+    pub reactive: Option<bool>,
+    pub min_width: Option<u16>,
+    pub min_height: Option<u16>,
+    pub react_width: Option<u16>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Config {
-    pub db_path: PathBuf,
-    pub db_type: DbType,
-    pub backup_path: PathBuf,
-    pub temp_file_path: PathBuf,
-    pub editor_command: String,
-}
+impl Default for ConfigProto {
+    fn default() -> ConfigProto {
+        let temp_file_path = if cfg!(unix) {
+            Some(PathBuf::from("/tmp/thought.md"))
+        } else if cfg!(windows) {
+            Some(PathBuf::from("%temp%\\thought.md"))
+        } else {
+            None
+        };
 
-impl Default for Config {
-    fn default() -> Self {
-        Config {
-            db_type: DbType::Fs,
-            db_path: String::from(tilde("~/.config/thoughts/entries/")).into(),
-            backup_path: String::from(tilde("~/.config/thoughts/backups/")).into(),
-            temp_file_path: String::from(tilde("~/.config/thoughts/.temp/")).into(),
-            editor_command: String::from("nvim"),
+        ConfigProto {
+            vault_path: None,
+            thoughts_path: Some(PathBuf::from("Thoughts")),
+            temp_file_path,
+            editor_command: None,
+            reactive: Some(true),
+            min_width: Some(58),
+            min_height: Some(18),
+            react_width: Some(80),
         }
     }
+}
+
+#[derive(Debug, Default)]
+pub struct Config {
+    pub vault_path: PathBuf,
+    pub thoughts_path: PathBuf,
+    pub temp_file_path: PathBuf,
+    pub editor_command: String,
+    pub reactive: bool,
+    pub min_width: u16,
+    pub min_height: u16,
+    pub react_width: u16,
 }
 
 impl Config {
-    fn serialize(&self) -> String {
-        toml::to_string(self).unwrap()
-    }
-}
+    // TODO: test this on both Windows and MacOS
+    /// Returns the configuration path
+    /// - Will default to different values depending on operating system
+    /// - Can be overwritten by environmental variables
+    pub fn get_path() -> PathBuf {
+        let config_path = if cfg!(unix) {
+            PathBuf::from("~/.config/thoughts.toml")
+        } else if cfg!(windows) {
+            PathBuf::from("%USERPROFILE%\\AppData\\Local\\MyApp\\")
+        } else {
+            panic!("we should not be here.")
+        };
 
-// TODO: add proper error handling for the love of GOD
-// TODO: check to ensure config is valid (paths are real, etc)
-pub fn load_config(config_path: String) -> Option<Config> {
-    let config_path = PathBuf::from(tilde(&config_path).to_string());
-
-    let config: Option<Config> = Figment::from(Serialized::defaults(Config::default()))
-        .merge(Toml::file(config_path))
-        .extract()
-        .unwrap();
-
-    match config {
-        // Hack?
-        // FIXME:
-        Some(mut config) => {
-            config.db_path = tilde::<str>(&config.db_path.to_str().unwrap())
-                .to_string()
-                .into();
-            config.backup_path = tilde(&config.backup_path.to_str().unwrap())
-                .to_string()
-                .into();
-
-            Some(config)
+        match env::var_os("THOUGHTS_CONFIG_PATH") {
+            Some(env_var_path) => return PathBuf::from(env_var_path),
+            None => return config_path,
         }
-        None => None,
-    }
-}
-
-pub fn scaffold_config_dir(config: &Config) {
-    let config_dir = config.backup_path.parent().unwrap();
-    _ = fs::create_dir(config_dir);
-    _ = fs::create_dir(config.backup_path.clone());
-    _ = fs::create_dir(config.temp_file_path.clone());
-
-    match config.db_type {
-        DbType::Sql => {}
-        DbType::Fs => _ = fs::create_dir(&config.db_path),
     }
 
-    let config_path = config_dir.join("config.toml");
-    let mut file = File::create(config_path).unwrap();
-    write!(file, "{}", config.serialize()).unwrap();
+    pub fn read(config_path: PathBuf) -> Result<Config> {
+        let config_proto: ConfigProto = Figment::from(Serialized::defaults(ConfigProto::default()))
+            .merge(Toml::file(config_path))
+            .merge(Toml::file("thoughts.toml"))
+            .merge(Env::prefixed("THOUGHTS_"))
+            .extract()?;
+
+        Ok(Config {
+            vault_path: Config::expand_path(
+                config_proto.vault_path,
+                "expected path to Obsidian vault in config file or environmental variable",
+            )?,
+            thoughts_path: Config::expand_path(
+                config_proto.thoughts_path,
+                "expected path to subfolder within Obsidian vault containing thoughts",
+            )?,
+            editor_command: config_proto
+                .editor_command
+                .ok_or(anyhow!("expected editor command"))?,
+            // These should never be anything other than Some(T)
+            temp_file_path: Config::expand_path(
+                config_proto.temp_file_path,
+                "expected path to temp file",
+            )?,
+            reactive: config_proto.reactive.unwrap(),
+            min_width: config_proto.min_width.unwrap(),
+            min_height: config_proto.min_height.unwrap(),
+            react_width: config_proto.react_width.unwrap(),
+        })
+    }
+
+    /// Takes in an Option<PathBuf> and returns either an error,
+    /// or an appropriately expanded, OS-specific PathBuf
+    /// eg:
+    ///     On UNIX, `~/.config/` becomes `/home/user/.config/`
+    fn expand_path(path: Option<PathBuf>, if_none: &str) -> Result<PathBuf> {
+        let if_none = if_none.to_string();
+        let path = path.ok_or(anyhow!(if_none))?;
+
+        let path_str = path
+            .to_str()
+            .ok_or(anyhow!("unable to cast path to string"))?;
+
+        let expanded_path = shellexpand::full(path_str)?.to_string();
+
+        Ok(PathBuf::from(expanded_path))
+    }
 }
