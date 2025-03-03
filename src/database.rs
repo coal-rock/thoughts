@@ -3,7 +3,8 @@
 
 use anyhow::Result;
 use glob::glob;
-use std::path::{Path, PathBuf};
+use std::fs;
+use std::path::PathBuf;
 
 pub struct Entry {
     title: String,
@@ -30,10 +31,16 @@ impl Database {
     }
 
     pub fn new(vault_path: PathBuf, thoughts_path: PathBuf) -> Database {
-        let mut vault_path = vault_path;
-        vault_path.push(thoughts_path);
-        vault_path.push("*.md");
-        let path_str = vault_path.to_str().unwrap().to_string();
+        let mut full_thoughts_path = vault_path;
+        full_thoughts_path.push(thoughts_path);
+
+        if !full_thoughts_path.exists() {
+            println!("asdajs");
+            fs::create_dir_all(&full_thoughts_path).unwrap();
+        }
+
+        full_thoughts_path.push("*.md");
+        let path_str = full_thoughts_path.to_str().unwrap().to_string();
 
         Database {
             path_str,

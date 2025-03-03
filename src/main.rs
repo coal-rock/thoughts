@@ -13,7 +13,7 @@ async fn main() -> Result<()> {
     let config = Config::read(config_path)?;
 
     let mut database = Database::new(config.vault_path.clone(), config.thoughts_path.clone());
-    database.poll();
+    database.poll()?;
 
     println!("{:#?}", config);
 
