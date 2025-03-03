@@ -9,6 +9,7 @@ figment = { version = "0.10.19", features = ["toml", "env"] }
 glob = "0.3.2"
 iocraft = "0.6.4"
 serde = { version = "1.0", features = ["derive"] }
+shellexpand = "3.1.0"
 tokio = { version = "1.43.0", features = ["full"] }
 toml = "0.8.20"
 walkdir = "2.5.0"

@@ -2,6 +2,7 @@ use anyhow::{Result, anyhow};
 use figment::Figment;
 use figment::providers::{Env, Format, Serialized, Toml};
 use serde::{Deserialize, Serialize};
+use shellexpand::env;
 use std::env;
 use std::path::PathBuf;
 
@@ -80,21 +81,43 @@ impl Config {
             .extract()?;
 
         Ok(Config {
-            vault_path: config_proto.vault_path.ok_or(anyhow!(
-                "expected path to Obsidian vault in config file or environmental variable"
-            ))?,
-            thoughts_path: config_proto.thoughts_path.ok_or(anyhow!(
-                "expected path to subfolder within Obsidian vault containing thoughts"
-            ))?,
+            vault_path: Config::expand_path(
+                config_proto.vault_path,
+                "expected path to Obsidian vault in config file or environmental variable",
+            )?,
+            thoughts_path: Config::expand_path(
+                config_proto.thoughts_path,
+                "expected path to subfolder within Obsidian vault containing thoughts",
+            )?,
             editor_command: config_proto
                 .editor_command
                 .ok_or(anyhow!("expected editor command"))?,
             // These should never be anything other than Some(T)
-            temp_file_path: config_proto.temp_file_path.unwrap(),
+            temp_file_path: Config::expand_path(
+                config_proto.temp_file_path,
+                "expected path to temp file",
+            )?,
             reactive: config_proto.reactive.unwrap(),
             min_width: config_proto.min_width.unwrap(),
             min_height: config_proto.min_height.unwrap(),
             react_width: config_proto.react_width.unwrap(),
         })
+    }
+
+    /// Takes in an Option<PathBuf> and returns either an error,
+    /// or an appropriately expanded, OS-specific PathBuf
+    /// eg:
+    ///     On UNIX, `~/.config/` becomes `/home/user/.config/`
+    fn expand_path(path: Option<PathBuf>, if_none: &str) -> Result<PathBuf> {
+        let if_none = if_none.to_string();
+        let path = path.ok_or(anyhow!(if_none))?;
+
+        let path_str = path
+            .to_str()
+            .ok_or(anyhow!("unable to cast path to string"))?;
+
+        let expanded_path = shellexpand::full(path_str)?.to_string();
+
+        Ok(PathBuf::from(expanded_path))
     }
 }
