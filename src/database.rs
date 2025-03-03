@@ -9,7 +9,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::UNIX_EPOCH;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Entry {
     title: String,
     favorite: bool,

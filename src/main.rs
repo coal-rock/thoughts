@@ -75,12 +75,20 @@ struct MainPageProps {
 
 #[component]
 fn MainPage(props: &MainPageProps) -> impl Into<AnyElement<'static>> {
+    // Manually adjusting width of the containers isn't a great idea, but I can't
+    // seem to get flexboxes to play nicely at the moment
+    let note_list_width = match props.show_note_content {
+        true => props.term_width / 2,
+        false => props.term_width - 2,
+    };
+
     element! {
         View(
             display: Display::Flex,
             height: props.term_height,
             width: props.term_width,
             flex_direction: FlexDirection::Column,
+            justify_content: JustifyContent::SpaceBetween,
             padding_left: 1,
             padding_right: 1,
         ) {
@@ -90,13 +98,15 @@ fn MainPage(props: &MainPageProps) -> impl Into<AnyElement<'static>> {
                 display: Display::Flex,
                 flex_direction: FlexDirection::Row,
                 height: 100pct,
+                height: props.term_height,
+                width: props.term_width - 2,
                 ) {
-                NoteList()
+                NoteList(width: note_list_width)
 
                 // Hide the content of a note if the terminal is smaller than
                 // or equal to the react width set through the config
                 #(match props.show_note_content {
-                        true => element!{NoteContent}.into_any(),
+                        true => element!{NoteContent()}.into_any(),
                         false => element!{View}.into_any(),
                 })
             }
@@ -201,24 +211,71 @@ fn StatusBar() -> impl Into<AnyElement<'static>> {
     }
 }
 
-#[component]
-fn NoteList() -> impl Into<AnyElement<'static>> {
-    element! {
-        View(
-            border_style: BorderStyle::Round,
-            border_color: Color::White,
-            flex_grow: 1.0,
-        )
-    }
+#[derive(Props, Default)]
+struct NoteListProps {
+    width: u16,
 }
 
 #[component]
-fn NoteContent() -> impl Into<AnyElement<'static>> {
+fn NoteList(props: &NoteListProps) -> impl Into<AnyElement<'static>> {
     element! {
         View(
             border_style: BorderStyle::Round,
             border_color: Color::White,
             flex_grow: 1.0,
+            display: Display::Flex,
+            flex_direction: FlexDirection::Column,
+            max_width: props.width,
+            // min_width: props.width,
+        ) {
+            NoteListEntry(title: "hello, worldasldjalksdjalskdjalksjdalksjdl123465", width: props.width, is_favorite: true)
+            NoteListEntry(title: "hello, worldasldjalksdjalskdjalksjdalksjdl", width: props.width, is_favorite: false)
+        }
+    }
+}
+
+#[derive(Props, Default)]
+struct NoteListEntryProps {
+    width: u16,
+    is_favorite: bool,
+    modified_at: u64,
+    title: String,
+}
+
+#[component]
+fn NoteListEntry(props: &NoteListEntryProps) -> impl Into<AnyElement<'static>> {
+    // Use to calculate where to truncate title
+    let width_remaining = props.width - 25;
+    let did_truncate = width_remaining < props.title.len() as u16;
+
+    let mut title = props.title.clone();
+    title.truncate(width_remaining.into());
+
+    element! {
+        View(width: props.width) {
+            Text(content: if props.is_favorite {" ★ "} else {" ☆ "})
+            Text(content: "06-06-2023 ", color: Color::Blue)
+            Text(content: "11:40am ", color: Color::Green)
+            Text(content: title)
+            Text(content: if did_truncate {"…"} else {""})
+        }
+    }
+}
+
+#[derive(Props, Default)]
+struct NoteContentProps {
+    width: u16,
+}
+
+#[component]
+fn NoteContent(props: &NoteContentProps) -> impl Into<AnyElement<'static>> {
+    element! {
+        View(
+            border_style: BorderStyle::Round,
+            border_color: Color::White,
+            flex_grow: 1.0,
+            // max_width: props.width,
+            // min_width: props.width,
         )
     }
 }
