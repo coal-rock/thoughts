@@ -3,17 +3,14 @@ pub mod database;
 
 use anyhow::Result;
 use config::Config;
-use database::Database;
+use database::{Database, Entry};
 use iocraft::prelude::*;
-use std::cmp::max;
+use std::cmp::{max, min};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let config_path = Config::get_path();
     let config = Config::read(config_path)?;
-
-    let mut database = Database::new(config.vault_path.clone(), config.thoughts_path.clone());
-    database.poll()?;
 
     println!("{:#?}", config);
 
@@ -37,6 +34,13 @@ fn App(mut hooks: Hooks, props: &AppProps) -> impl Into<AnyElement<'static>> {
     let mut system = hooks.use_context_mut::<SystemContext>();
     let mut should_exit = hooks.use_state(|| false);
 
+    let mut database = hooks.use_state(|| {
+        Database::new(
+            props.config.vault_path.clone(),
+            props.config.thoughts_path.clone(),
+        )
+    });
+
     hooks.use_terminal_events({
         move |event| match event {
             TerminalEvent::Key(KeyEvent { code, kind, .. }) if kind != KeyEventKind::Release => {
@@ -59,7 +63,7 @@ fn App(mut hooks: Hooks, props: &AppProps) -> impl Into<AnyElement<'static>> {
     element! {
         View(){
             #(match should_render {
-                true => element!{MainPage(term_width: width, term_height: height, show_note_content)}.into_any(),
+                true => element!{MainPage(term_width: width, term_height: height, show_note_content, database: database.read().clone())}.into_any(),
                 false => element!{ResizeTermPage(term_width: width, term_height: height, min_width: props.config.min_width, min_height: props.config.min_height)}.into_any(),
             })
         }
@@ -68,19 +72,54 @@ fn App(mut hooks: Hooks, props: &AppProps) -> impl Into<AnyElement<'static>> {
 
 #[derive(Default, Props)]
 struct MainPageProps {
+    database: Database,
     show_note_content: bool,
     term_width: u16,
     term_height: u16,
 }
 
 #[component]
-fn MainPage(props: &MainPageProps) -> impl Into<AnyElement<'static>> {
+fn MainPage(mut hooks: Hooks, props: &MainPageProps) -> impl Into<AnyElement<'static>> {
     // Manually adjusting width of the containers isn't a great idea, but I can't
     // seem to get flexboxes to play nicely at the moment
     let note_list_width = match props.show_note_content {
         true => props.term_width / 2,
         false => props.term_width - 2,
     };
+
+    let mut selected_entry: State<Option<usize>> = hooks.use_state(|| None);
+
+    let entry_count = props.database.entries.len().clone();
+
+    if entry_count > 0 && selected_entry.get() == None {
+        selected_entry.set(Some(0));
+    }
+
+    if entry_count == 0 {
+        selected_entry.set(None);
+    }
+
+    hooks.use_terminal_events({
+        move |event| match event {
+            TerminalEvent::Key(KeyEvent { code, kind, .. }) if kind != KeyEventKind::Release => {
+                match code {
+                    KeyCode::Up => match selected_entry.get() {
+                        Some(index) => {
+                            selected_entry.set(Some(max(index as i32 - 1, 0 as i32) as usize))
+                        }
+                        None => {}
+                    },
+                    KeyCode::Down => match selected_entry.get() {
+                        Some(index) => selected_entry
+                            .set(Some(min(index as i32 + 1, entry_count as i32 - 1) as usize)),
+                        None => {}
+                    },
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    });
 
     element! {
         View(
@@ -101,7 +140,7 @@ fn MainPage(props: &MainPageProps) -> impl Into<AnyElement<'static>> {
                 height: props.term_height,
                 width: props.term_width - 2,
                 ) {
-                NoteList(width: note_list_width)
+                NoteList(width: note_list_width, entries: props.database.entries.clone(), selected_entry: selected_entry.read().clone())
 
                 // Hide the content of a note if the terminal is smaller than
                 // or equal to the react width set through the config
@@ -214,6 +253,8 @@ fn StatusBar() -> impl Into<AnyElement<'static>> {
 #[derive(Props, Default)]
 struct NoteListProps {
     width: u16,
+    entries: Vec<Entry>,
+    selected_entry: Option<usize>,
 }
 
 #[component]
@@ -228,8 +269,9 @@ fn NoteList(props: &NoteListProps) -> impl Into<AnyElement<'static>> {
             max_width: props.width,
             // min_width: props.width,
         ) {
-            NoteListEntry(title: "hello, worldasldjalksdjalskdjalksjdalksjdl123465", width: props.width, is_favorite: true)
-            NoteListEntry(title: "hello, worldasldjalksdjalskdjalksjdalksjdl", width: props.width, is_favorite: false)
+            #(props.entries.clone().into_iter().enumerate().map(|(index, entry)| element!{
+                NoteListEntry(title: entry.title, width: props.width, is_favorite: entry.favorite, is_selected: Some(index) == props.selected_entry)
+            }))
         }
     }
 }
@@ -240,6 +282,7 @@ struct NoteListEntryProps {
     is_favorite: bool,
     modified_at: u64,
     title: String,
+    is_selected: bool,
 }
 
 #[component]
@@ -256,7 +299,7 @@ fn NoteListEntry(props: &NoteListEntryProps) -> impl Into<AnyElement<'static>> {
             Text(content: if props.is_favorite {" ★ "} else {" ☆ "})
             Text(content: "06-06-2023 ", color: Color::Blue)
             Text(content: "11:40am ", color: Color::Green)
-            Text(content: title)
+            Text(content: title, color: if props.is_selected { Color::Red } else { Color::White })
             Text(content: if did_truncate {"…"} else {""})
         }
     }

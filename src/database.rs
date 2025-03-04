@@ -9,15 +9,23 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::UNIX_EPOCH;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Entry {
-    title: String,
-    favorite: bool,
-    content: String,
-    tags: Vec<String>,
-    path: PathBuf,
-    created_at: u64,
-    modified_at: u64,
+    pub title: String,
+    pub favorite: bool,
+    pub content: String,
+    pub tags: Vec<String>,
+    pub path: PathBuf,
+    pub created_at: u64,
+    pub modified_at: u64,
+}
+
+impl Entry {
+    pub fn test(self) -> bool {
+        eprintln!("what the shit fuck");
+
+        false
+    }
 }
 
 impl Into<Frontmatter> for &Entry {
@@ -40,11 +48,12 @@ struct Frontmatter {
     tags: Vec<String>,
 }
 
+#[derive(Debug, Default, Clone)]
 pub struct Database {
     /// Path to directory containing all Thoughts, followed by trailing `/*.md`
     /// Eg: `/home/coal/Important/Vault/Thoughts/*.md`
     path_str: String,
-    entries: Vec<Entry>,
+    pub entries: Vec<Entry>,
 }
 
 impl Database {
@@ -167,6 +176,7 @@ impl Database {
     ///
     /// Will scaffold required directories if not already present
     pub fn new(vault_path: PathBuf, thoughts_path: PathBuf) -> Database {
+        eprintln!("fortnite!!!");
         let mut full_thoughts_path = vault_path;
         full_thoughts_path.push(thoughts_path);
 
@@ -177,9 +187,13 @@ impl Database {
         full_thoughts_path.push("*.md");
         let path_str = full_thoughts_path.to_str().unwrap().to_string();
 
-        Database {
+        let mut database = Database {
             path_str,
             entries: vec![],
-        }
+        };
+
+        database.poll();
+
+        database
     }
 }
