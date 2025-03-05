@@ -34,12 +34,7 @@ fn App(mut hooks: Hooks, props: &AppProps) -> impl Into<AnyElement<'static>> {
     let mut system = hooks.use_context_mut::<SystemContext>();
     let mut should_exit = hooks.use_state(|| false);
 
-    let mut database = hooks.use_state(|| {
-        Database::new(
-            props.config.vault_path.clone(),
-            props.config.thoughts_path.clone(),
-        )
-    });
+    let mut database = hooks.use_state(|| Database::new(props.config.thoughts_path.clone()));
 
     hooks.use_terminal_events({
         move |event| match event {

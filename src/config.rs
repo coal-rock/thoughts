@@ -2,13 +2,11 @@ use anyhow::{Result, anyhow};
 use figment::Figment;
 use figment::providers::{Env, Format, Serialized, Toml};
 use serde::{Deserialize, Serialize};
-use shellexpand::env;
 use std::env;
 use std::path::PathBuf;
 
 #[derive(Deserialize, Serialize)]
 struct ConfigProto {
-    pub vault_path: Option<PathBuf>,
     pub thoughts_path: Option<PathBuf>,
     pub temp_file_path: Option<PathBuf>,
     pub editor_command: Option<String>,
@@ -29,8 +27,7 @@ impl Default for ConfigProto {
         };
 
         ConfigProto {
-            vault_path: None,
-            thoughts_path: Some(PathBuf::from("Thoughts")),
+            thoughts_path: None,
             temp_file_path,
             editor_command: None,
             reactive: Some(true),
@@ -43,7 +40,6 @@ impl Default for ConfigProto {
 
 #[derive(Debug, Default)]
 pub struct Config {
-    pub vault_path: PathBuf,
     pub thoughts_path: PathBuf,
     pub temp_file_path: PathBuf,
     pub editor_command: String,
@@ -62,7 +58,7 @@ impl Config {
         let config_path = if cfg!(unix) {
             PathBuf::from("~/.config/thoughts.toml")
         } else if cfg!(windows) {
-            PathBuf::from("%USERPROFILE%\\AppData\\Local\\MyApp\\")
+            PathBuf::from("%USERPROFILE%\\AppData\\Local\\Thoughts\\thoughts.toml")
         } else {
             panic!("we should not be here.")
         };
@@ -81,13 +77,9 @@ impl Config {
             .extract()?;
 
         Ok(Config {
-            vault_path: Config::expand_path(
-                config_proto.vault_path,
-                "expected path to Obsidian vault in config file or environmental variable",
-            )?,
             thoughts_path: Config::expand_path(
                 config_proto.thoughts_path,
-                "expected path to subfolder within Obsidian vault containing thoughts",
+                "expected path to thoughts directory",
             )?,
             editor_command: config_proto
                 .editor_command

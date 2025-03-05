@@ -1,2 +1,2 @@
-vault_path = "~/Important/Vault"
+thoughts_path = "~/Important/Vault/"
 editor_command = "nvim"
